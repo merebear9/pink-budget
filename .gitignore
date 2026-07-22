@@ -1,0 +1,28 @@
+# Xcode
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.build/
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Backend
+Backend/.env
+Backend/__pycache__/
+Backend/*.pyc
+Backend/venv/
+
+# React Native / Node
+ReactNative/node_modules/
+ReactNative/.expo/
