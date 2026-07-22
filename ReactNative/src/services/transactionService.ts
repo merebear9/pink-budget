@@ -1,19 +1,6 @@
 import { Account, Transaction, TransactionClassification, BudgetCategory } from '../models/types';
-
-// ── Plaid Transaction (from API response) ──
-interface PlaidTransaction {
-  transaction_id: string;
-  account_id: string;
-  amount: number;
-  date: string;
-  name: string;
-  merchant_name: string | null;
-  personal_finance_category?: {
-    primary: string;
-    detailed: string;
-  };
-  pending: boolean;
-}
+import { PlaidTransaction, fetchTransactions } from './plaidService';
+import { markAccountSynced, removeTransactionsByPlaidId, upsertTransactions } from '../database';
 
 /**
  * ANTI-DOUBLE-COUNT CLASSIFICATION
@@ -160,4 +147,34 @@ export function buildTransaction(
     notes: null,
     accountId: account.id,
   };
+}
+
+// ── Sync (fetch from Plaid, classify, persist) ──
+//
+// Mirrors the anti-double-count sync loop in the iOS TransactionService.
+
+export async function syncAccountTransactions(
+  account: Account,
+  categories: BudgetCategory[]
+): Promise<void> {
+  let cursor: string | undefined;
+  let hasMore = true;
+
+  while (hasMore) {
+    const response = await fetchTransactions(account.plaidAccessToken, cursor);
+
+    const newTransactions = response.added.map(plaidTx =>
+      buildTransaction(plaidTx, account, categories)
+    );
+    await upsertTransactions(newTransactions);
+
+    if (response.removed.length > 0) {
+      await removeTransactionsByPlaidId(response.removed.map(r => r.transaction_id));
+    }
+
+    cursor = response.next_cursor;
+    hasMore = response.has_more;
+  }
+
+  await markAccountSynced(account.id);
 }

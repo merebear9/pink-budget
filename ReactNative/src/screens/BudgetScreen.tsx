@@ -1,42 +1,60 @@
 // BudgetScreen.tsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme/pink';
-import { DEFAULT_CATEGORIES } from '../models/types';
 import { formatCurrency } from '../utils/formatters';
+import { useData } from '../context/DataContext';
+import { computeCategorySpending, computeTotalSpending } from '../services/budgetService';
 
 export default function BudgetScreen() {
-  const totalBudget = DEFAULT_CATEGORIES.reduce((s, c) => s + c.monthlyLimit, 0);
+  const { transactions, categories } = useData();
+
+  const totalBudget = useMemo(
+    () => categories.reduce((s, c) => s + c.monthlyLimit, 0),
+    [categories]
+  );
+  const totalSpent = useMemo(() => computeTotalSpending(transactions), [transactions]);
+  const categorySpending = useMemo(
+    () => computeCategorySpending(transactions, categories),
+    [transactions, categories]
+  );
+  const remaining = totalBudget - totalSpent;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Overview */}
       <View style={[styles.card, shadows.card]}>
-        <Text style={styles.bigMoney}>$0</Text>
+        <Text style={styles.bigMoney}>{formatCurrency(totalSpent)}</Text>
         <Text style={styles.subtitle}>of {formatCurrency(totalBudget)} budget</Text>
-        <Text style={[styles.remaining, { color: colors.success }]}>
-          {formatCurrency(totalBudget)} left this month
+        <Text style={[styles.remaining, { color: remaining >= 0 ? colors.success : colors.danger }]}>
+          {remaining >= 0
+            ? `${formatCurrency(remaining)} left this month`
+            : `${formatCurrency(-remaining)} over budget`}
         </Text>
       </View>
 
       {/* Category Cards */}
-      {DEFAULT_CATEGORIES.map(cat => {
-        const spent = 0; // TODO: Calculate from transactions
-        const ratio = cat.monthlyLimit > 0 ? spent / cat.monthlyLimit : 0;
+      {categorySpending.map(({ category, spent }) => {
+        const ratio = category.monthlyLimit > 0 ? spent / category.monthlyLimit : 0;
 
         return (
-          <View key={cat.name} style={[styles.catCard, shadows.card]}>
+          <View key={category.id} style={[styles.catCard, shadows.card]}>
             <View style={styles.catHeader}>
-              <Text style={styles.catName}>{cat.name}</Text>
+              <Text style={styles.catName}>{category.name}</Text>
               <Text style={styles.catAmounts}>
-                {formatCurrency(spent)} / {formatCurrency(cat.monthlyLimit)}
+                {formatCurrency(spent)} / {formatCurrency(category.monthlyLimit)}
               </Text>
             </View>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, {
-                width: `${Math.min(ratio * 100, 100)}%`,
-                backgroundColor: `#${cat.colorHex}`,
-              }]} />
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${Math.min(ratio * 100, 100)}%`,
+                    backgroundColor: ratio > 1 ? colors.danger : `#${category.colorHex}`,
+                  },
+                ]}
+              />
             </View>
           </View>
         );

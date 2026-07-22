@@ -33,3 +33,8 @@ export function getShortMonthName(month: number): string {
   const date = new Date(2026, month - 1, 1);
   return date.toLocaleDateString('en-US', { month: 'short' });
 }
+
+export function isSameMonth(isoDateString: string, reference: Date = new Date()): boolean {
+  const d = new Date(isoDateString);
+  return d.getFullYear() === reference.getFullYear() && d.getMonth() === reference.getMonth();
+}

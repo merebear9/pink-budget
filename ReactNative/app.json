@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "PinkBudget",
+    "slug": "pinkbudget",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "pinkbudget",
+    "ios": {
+      "bundleIdentifier": "com.meredithmcclain.pinkbudget",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.meredithmcclain.pinkbudget",
+      "adaptiveIcon": {
+        "backgroundColor": "#E91E8C",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

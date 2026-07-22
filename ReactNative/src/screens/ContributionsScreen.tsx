@@ -1,21 +1,22 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme/pink';
-import { Contribution, ContributionLabel, MonthlyContributionSummary } from '../models/types';
+import { ContributionLabel, MonthlyContributionSummary } from '../models/types';
 import { formatCurrency } from '../utils/formatters';
+import { useData } from '../context/DataContext';
 
-const MONTHLY_TARGET = 3500; // TODO: Pull from settings/storage
-
-// Placeholder data -- replace with SQLite queries
-const SAMPLE_CONTRIBUTIONS: Contribution[] = [];
+const CONTRIBUTION_LABELS: ContributionLabel[] = ['TSP', '401(k)', 'Roth IRA', 'Other'];
 
 export default function ContributionsScreen() {
+  const { contributions, monthlyTarget, addManualContribution } = useData();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [showAddModal, setShowAddModal] = useState(false);
-  const [contributions] = useState<Contribution[]>(SAMPLE_CONTRIBUTIONS);
+  const [newAmount, setNewAmount] = useState('');
+  const [newLabel, setNewLabel] = useState<ContributionLabel>('TSP');
+  const [isSaving, setIsSaving] = useState(false);
 
   const annualSummary = useMemo(() => {
     const yearContribs = contributions.filter(c => {
@@ -34,13 +35,13 @@ export default function ContributionsScreen() {
     });
 
     const totalContributed = months.reduce((s, m) => s + m.total, 0);
-    const annualTarget = MONTHLY_TARGET * 12;
+    const annualTarget = monthlyTarget * 12;
     const monthsWithData = months.filter(m => m.total > 0).length;
 
     return {
       year: selectedYear,
       months,
-      monthlyTarget: MONTHLY_TARGET,
+      monthlyTarget,
       totalContributed,
       annualTarget,
       percentOfTarget: annualTarget > 0 ? totalContributed / annualTarget : 0,
@@ -51,10 +52,35 @@ export default function ContributionsScreen() {
       rothTotal: months.reduce((s, m) => s + m.roth, 0),
       otherTotal: months.reduce((s, m) => s + m.other, 0),
     };
-  }, [contributions, selectedYear]);
+  }, [contributions, selectedYear, monthlyTarget]);
 
   const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const FULL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  const resetAddForm = () => {
+    setNewAmount('');
+    setNewLabel('TSP');
+  };
+
+  const handleSave = async () => {
+    const amount = parseFloat(newAmount);
+    if (!amount || amount <= 0) return;
+
+    setIsSaving(true);
+    try {
+      await addManualContribution({
+        date: new Date().toISOString(),
+        amount,
+        label: newLabel,
+        notes: null,
+        linkedTransactionId: null,
+      });
+      resetAddForm();
+      setShowAddModal(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -98,9 +124,9 @@ export default function ContributionsScreen() {
         <Text style={styles.sectionTitle}>Monthly Contributions</Text>
         <View style={styles.chartContainer}>
           {annualSummary.months.map((month, i) => {
-            const maxVal = Math.max(MONTHLY_TARGET, ...annualSummary.months.map(m => m.total));
+            const maxVal = Math.max(monthlyTarget, ...annualSummary.months.map(m => m.total));
             const barHeight = maxVal > 0 ? (month.total / maxVal) * 140 : 0;
-            const targetHeight = maxVal > 0 ? (MONTHLY_TARGET / maxVal) * 140 : 0;
+            const targetHeight = maxVal > 0 ? (monthlyTarget / maxVal) * 140 : 0;
 
             return (
               <View key={i} style={styles.barColumn}>
@@ -110,7 +136,7 @@ export default function ContributionsScreen() {
                   {/* Bar */}
                   <View style={[styles.bar, {
                     height: barHeight,
-                    backgroundColor: month.total >= MONTHLY_TARGET ? colors.success : colors.pinkPrimary,
+                    backgroundColor: month.total >= monthlyTarget ? colors.success : colors.pinkPrimary,
                   }]} />
                 </View>
                 <Text style={styles.barLabel}>{MONTH_NAMES[i]}</Text>
@@ -145,12 +171,12 @@ export default function ContributionsScreen() {
       <View style={[styles.card, shadows.card]}>
         <Text style={styles.sectionTitle}>Month by Month</Text>
         {[...annualSummary.months].reverse().map((month) => {
-          const diff = month.total - MONTHLY_TARGET;
+          const diff = month.total - monthlyTarget;
           return (
             <View key={month.month} style={styles.monthRow}>
               <Text style={styles.monthName}>{FULL_MONTHS[month.month - 1]}</Text>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={[styles.monthTotal, month.total >= MONTHLY_TARGET && { color: colors.success }]}>
+                <Text style={[styles.monthTotal, month.total >= monthlyTarget && { color: colors.success }]}>
                   {formatCurrency(month.total)}
                 </Text>
                 {month.total > 0 && (
@@ -171,6 +197,67 @@ export default function ContributionsScreen() {
       </TouchableOpacity>
 
       <View style={{ height: 40 }} />
+
+      {/* Add Contribution Modal */}
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add Contribution</Text>
+
+            <Text style={styles.modalLabel}>Amount</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newAmount}
+              onChangeText={setNewAmount}
+              keyboardType="decimal-pad"
+              placeholder="$0"
+              autoFocus
+            />
+
+            <Text style={styles.modalLabel}>Account</Text>
+            <View style={styles.labelRow}>
+              {CONTRIBUTION_LABELS.map(label => (
+                <TouchableOpacity
+                  key={label}
+                  style={[styles.labelChip, newLabel === label && styles.labelChipActive]}
+                  onPress={() => setNewLabel(label)}
+                >
+                  <Text style={[styles.labelChipText, newLabel === label && styles.labelChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => {
+                  resetAddForm();
+                  setShowAddModal(false);
+                }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSaveButton, isSaving && { opacity: 0.6 }]}
+                onPress={handleSave}
+                disabled={isSaving || !newAmount}
+              >
+                <Text style={styles.modalSaveText}>{isSaving ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -208,4 +295,28 @@ const styles = StyleSheet.create({
   monthDiff: { ...typography.caption, marginTop: 2 },
   addButton: { backgroundColor: colors.pinkPrimary, borderRadius: borderRadius.md, padding: spacing.md, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
   addButtonText: { ...typography.headline, color: '#fff' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalCard: { backgroundColor: colors.bgCard, borderTopLeftRadius: borderRadius.lg, borderTopRightRadius: borderRadius.lg, padding: spacing.xl },
+  modalTitle: { ...typography.title2, color: colors.textPrimary, marginBottom: spacing.lg },
+  modalLabel: { ...typography.callout, color: colors.textSecondary, marginBottom: spacing.sm },
+  modalInput: {
+    ...typography.title,
+    color: colors.pinkPrimary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  labelRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.xl },
+  labelChip: { backgroundColor: colors.pinkLight, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
+  labelChipActive: { backgroundColor: colors.pinkPrimary },
+  labelChipText: { ...typography.callout, color: colors.pinkPrimary },
+  labelChipTextActive: { color: '#fff' },
+  modalButtonRow: { flexDirection: 'row', gap: spacing.md },
+  modalButton: { flex: 1, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
+  modalCancelButton: { backgroundColor: colors.pinkLight },
+  modalCancelText: { ...typography.headline, color: colors.pinkPrimary },
+  modalSaveButton: { backgroundColor: colors.pinkPrimary },
+  modalSaveText: { ...typography.headline, color: '#fff' },
 });

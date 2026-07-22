@@ -26,3 +26,11 @@ Backend/venv/
 # React Native / Node
 ReactNative/node_modules/
 ReactNative/.expo/
+ReactNative/dist/
+ReactNative/web-build/
+ReactNative/expo-env.d.ts
+ReactNative/.kotlin/
+ReactNative/*.tsbuildinfo
+ReactNative/npm-debug.*
+ReactNative/ios/
+ReactNative/android/

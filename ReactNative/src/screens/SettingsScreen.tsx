@@ -1,15 +1,38 @@
 // SettingsScreen.tsx
-import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, typography, spacing, borderRadius } from '../theme/pink';
 import { formatCurrency } from '../utils/formatters';
+import { useData, PlaidEnvironment } from '../context/DataContext';
+import { RootStackParamList } from '../navigation/types';
+
+const PLAID_ENV_LABELS: Record<PlaidEnvironment, string> = {
+  sandbox: 'Sandbox (test)',
+  development: 'Development (real, free)',
+  production: 'Production (real, paid)',
+};
 
 export default function SettingsScreen() {
-  const [monthlyTarget, setMonthlyTarget] = useState('3500');
-  const [plaidEnv, setPlaidEnv] = useState<'sandbox' | 'development' | 'production'>('sandbox');
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { monthlyTarget, plaidEnvironment, setMonthlyTarget, setPlaidEnvironment, isSyncing, syncAllAccounts } = useData();
+  const [targetInput, setTargetInput] = useState(String(monthlyTarget));
 
-  const target = parseFloat(monthlyTarget) || 0;
+  useEffect(() => {
+    setTargetInput(String(monthlyTarget));
+  }, [monthlyTarget]);
+
+  const handleTargetChange = (text: string) => {
+    setTargetInput(text);
+    const value = parseFloat(text);
+    if (!Number.isNaN(value)) {
+      setMonthlyTarget(value);
+    }
+  };
+
+  const target = parseFloat(targetInput) || 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -20,8 +43,8 @@ export default function SettingsScreen() {
           <Text style={styles.label}>Monthly Target</Text>
           <TextInput
             style={styles.input}
-            value={monthlyTarget}
-            onChangeText={setMonthlyTarget}
+            value={targetInput}
+            onChangeText={handleTargetChange}
             keyboardType="decimal-pad"
             placeholder="3500"
           />
@@ -38,30 +61,29 @@ export default function SettingsScreen() {
       {/* Accounts */}
       <Text style={styles.sectionHeader}>ACCOUNTS</Text>
       <View style={styles.card}>
-        <TouchableOpacity style={styles.row}>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('Accounts')}>
           <Ionicons name="business-outline" size={20} color={colors.pinkPrimary} />
           <Text style={[styles.label, { marginLeft: 8 }]}>Manage Accounts</Text>
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row}>
+        <TouchableOpacity style={styles.row} onPress={syncAllAccounts} disabled={isSyncing}>
           <Ionicons name="sync-outline" size={20} color={colors.pinkPrimary} />
-          <Text style={[styles.label, { marginLeft: 8 }]}>Sync Now</Text>
+          <Text style={[styles.label, { marginLeft: 8 }]}>{isSyncing ? 'Syncing…' : 'Sync Now'}</Text>
+          {isSyncing && <ActivityIndicator size="small" color={colors.pinkPrimary} />}
         </TouchableOpacity>
       </View>
 
       {/* Plaid */}
       <Text style={styles.sectionHeader}>PLAID</Text>
       <View style={styles.card}>
-        {(['sandbox', 'development', 'production'] as const).map(env => (
+        {(Object.keys(PLAID_ENV_LABELS) as PlaidEnvironment[]).map(env => (
           <TouchableOpacity
             key={env}
             style={styles.row}
-            onPress={() => setPlaidEnv(env)}
+            onPress={() => setPlaidEnvironment(env)}
           >
-            <Text style={styles.label}>
-              {env === 'sandbox' ? 'Sandbox (test)' : env === 'development' ? 'Development (real, free)' : 'Production (real, paid)'}
-            </Text>
-            {plaidEnv === env && (
+            <Text style={styles.label}>{PLAID_ENV_LABELS[env]}</Text>
+            {plaidEnvironment === env && (
               <Ionicons name="checkmark" size={20} color={colors.pinkPrimary} />
             )}
           </TouchableOpacity>

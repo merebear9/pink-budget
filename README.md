@@ -1,9 +1,15 @@
 # PinkBudget
 
 A personal budgeting app that connects to your bank, credit cards, and
-retirement accounts via Plaid, auto-categorizes transactions, tracks
-retirement contributions (TSP / 401(k) / Roth IRA) separately from spending,
-and shows both on iOS home screen widgets.
+retirement accounts via Plaid, auto-categorizes transactions, and tracks
+retirement contributions (TSP / 401(k) / Roth IRA) separately from spending.
+
+Two clients, sharing one backend:
+- **Native iOS** (`PinkBudget.xcodeproj`) — SwiftUI + SwiftData, with home screen widgets.
+- **React Native** (`ReactNative/`) — cross-platform iOS + Android, no widgets.
+
+If you don't need home screen widgets, the React Native app is the simpler path since
+it's one codebase for both platforms instead of maintaining native iOS separately.
 
 ## Repo layout
 
@@ -17,11 +23,13 @@ PinkBudget/              Main app target sources (SwiftUI + SwiftData)
   Utils/                  Currency/date formatting helpers
 PinkBudgetWidget/         WidgetKit extension target (budget + retirement widgets)
 Backend/                  Flask server that talks to the Plaid API (holds your Plaid secret)
-ReactNative/              Alternate React Native client
+ReactNative/              Cross-platform (iOS + Android) client — see ReactNative/README.md
 SETUP_GUIDE.md            Full step-by-step setup (Plaid, backend hosting, Xcode, email alerts)
 ```
 
 ## Status
+
+### iOS (native)
 
 The Xcode project is fully wired up:
 - Both targets (`PinkBudget` app + `PinkBudgetWidget` extension) are configured with
@@ -54,3 +62,12 @@ Nothing currently writes to the widget's shared `UserDefaults` suite
 the home screen widgets will show their built-in sample data until that's added (e.g. in
 `BudgetAlertService`, alongside its existing `WidgetCenter.shared.reloadAllTimelines()`
 call).
+
+### React Native (iOS + Android)
+
+`ReactNative/` is a real, installable Expo project — `npm install` and
+`npx tsc --noEmit` both run clean (verified in this environment, unlike the native iOS
+build which needs an actual Mac/Xcode to compile). It has its own SQLite-backed
+persistence layer, Plaid Link via `react-native-plaid-link-sdk`, and all five screens
+wired to real data. See `ReactNative/README.md` for details, requirements (it needs a
+dev build — Plaid Link's native code doesn't run in Expo Go), and known gaps.

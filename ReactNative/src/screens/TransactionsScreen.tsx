@@ -1,18 +1,24 @@
 // TransactionsScreen.tsx
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme/pink';
-import { TransactionClassification, CLASSIFICATION_META, Transaction } from '../models/types';
+import { TransactionClassification, CLASSIFICATION_META } from '../models/types';
 import { formatCurrency } from '../utils/formatters';
+import { useData } from '../context/DataContext';
 
 const FILTER_OPTIONS: (TransactionClassification | 'all')[] = [
   'all', 'spending', 'contribution', 'transfer', 'income',
 ];
 
 export default function TransactionsScreen() {
+  const { transactions } = useData();
   const [filter, setFilter] = useState<TransactionClassification | 'all'>('all');
-  const [transactions] = useState<Transaction[]>([]);
+
+  const filteredTransactions = useMemo(
+    () => (filter === 'all' ? transactions : transactions.filter(tx => tx.classification === filter)),
+    [transactions, filter]
+  );
 
   return (
     <View style={styles.container}>
@@ -31,7 +37,7 @@ export default function TransactionsScreen() {
         ))}
       </ScrollView>
 
-      {transactions.length === 0 ? (
+      {filteredTransactions.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="list-outline" size={48} color={colors.pinkSoft} />
           <Text style={styles.emptyTitle}>No transactions yet</Text>
@@ -41,7 +47,7 @@ export default function TransactionsScreen() {
         </View>
       ) : (
         <FlatList
-          data={transactions}
+          data={filteredTransactions}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
             <View style={styles.txRow}>
