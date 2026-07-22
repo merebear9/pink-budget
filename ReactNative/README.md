@@ -97,6 +97,18 @@ Same classification system as the iOS app:
   Retirement Account" and pick which bucket (TSP / 401(k) / Roth IRA / Other) its
   contributions count toward.
 
+## Recurring contributions
+
+For money Plaid can't see at all — e.g. an employer 401(k) match that isn't
+connectable — add a **Recurring Contribution** from the Contributions tab (amount,
+account label, optional note). Each active recurring contribution gets added
+automatically once a month, the first time the app is opened that month (checked in
+`DataContext`'s startup effect against `hasContributionForRecurringInMonth` in
+`database.ts`). This is launch-triggered, not a true background job — neither iOS nor
+Android guarantees background tasks run on a schedule without the app being opened, so
+this is the reliable option. Toggle a recurring contribution off (switch) or delete it
+(trash icon) from the same screen.
+
 Neither of these "remembers" the correction for future transactions the way the iOS
 app's `MerchantLearningService` does — each correction only applies to that one
 transaction/account. Learned-merchant-rule matching would be a follow-up, not

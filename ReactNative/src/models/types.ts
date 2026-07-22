@@ -78,9 +78,23 @@ export interface Contribution {
   date: string;
   amount: number;
   label: ContributionLabel;
-  source: 'plaid' | 'manual';
+  source: 'plaid' | 'manual' | 'recurring';
   notes: string | null;
   linkedTransactionId: string | null;
+  recurringContributionId: string | null;
+}
+
+// ── Recurring Contribution ──
+// For contributions Plaid can't see at all (e.g. an employer 401(k) that
+// isn't connectable) -- a fixed amount that gets added automatically once
+// per month, the first time the app is opened that month.
+
+export interface RecurringContribution {
+  id: string;
+  label: ContributionLabel;
+  amount: number;
+  note: string | null;
+  isActive: boolean;
 }
 
 // ── Summaries ──

@@ -5,6 +5,7 @@ import {
   BudgetCategory,
   ContributionLabel,
   Contribution,
+  RecurringContribution,
   Transaction,
   TransactionClassification,
 } from '../models/types';
@@ -22,6 +23,7 @@ interface DataContextValue {
   transactions: Transaction[];
   categories: BudgetCategory[];
   contributions: Contribution[];
+  recurringContributions: RecurringContribution[];
   monthlyTarget: number;
   plaidEnvironment: PlaidEnvironment;
   isSyncing: boolean;
@@ -40,6 +42,9 @@ interface DataContextValue {
     isRetirementAccount: boolean,
     contributionLabel: ContributionLabel
   ) => Promise<void>;
+  addRecurringContribution: (recurring: Omit<RecurringContribution, 'id'>) => Promise<void>;
+  setRecurringContributionActive: (id: string, isActive: boolean) => Promise<void>;
+  deleteRecurringContribution: (id: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -50,6 +55,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<BudgetCategory[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [recurringContributions, setRecurringContributions] = useState<RecurringContribution[]>([]);
   const [monthlyTarget, setMonthlyTargetState] = useState(DEFAULT_MONTHLY_TARGET);
   const [plaidEnvironment, setPlaidEnvironmentState] = useState<PlaidEnvironment>('sandbox');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -58,6 +64,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const refreshTransactions = useCallback(async () => setTransactions(await db.getTransactions()), []);
   const refreshCategories = useCallback(async () => setCategories(await db.getBudgetCategories()), []);
   const refreshContributions = useCallback(async () => setContributions(await db.getContributions()), []);
+  const refreshRecurringContributions = useCallback(
+    async () => setRecurringContributions(await db.getRecurringContributions()),
+    []
+  );
 
   useEffect(() => {
     (async () => {
@@ -66,6 +76,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         refreshTransactions(),
         refreshCategories(),
         refreshContributions(),
+        refreshRecurringContributions(),
       ]);
 
       const storedTarget = await db.getSetting('monthlyContributionTarget');
@@ -76,9 +87,42 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setPlaidEnvironmentState(storedEnv);
       }
 
+      // Add this month's amount for any active recurring contribution
+      // (e.g. an employer 401(k) Plaid can't see) that hasn't been added yet.
+      const dueRecurring = await db.getRecurringContributions();
+      const now = new Date();
+      let addedAny = false;
+      for (const recurring of dueRecurring) {
+        if (!recurring.isActive) continue;
+        const alreadyAdded = await db.hasContributionForRecurringInMonth(
+          recurring.id,
+          now.getFullYear(),
+          now.getMonth() + 1
+        );
+        if (alreadyAdded) continue;
+
+        await db.insertContribution({
+          date: now.toISOString(),
+          amount: recurring.amount,
+          label: recurring.label,
+          source: 'recurring',
+          notes: recurring.note,
+          linkedTransactionId: null,
+          recurringContributionId: recurring.id,
+        });
+        addedAny = true;
+      }
+      if (addedAny) await refreshContributions();
+
       setIsReady(true);
     })();
-  }, [refreshAccounts, refreshTransactions, refreshCategories, refreshContributions]);
+  }, [
+    refreshAccounts,
+    refreshTransactions,
+    refreshCategories,
+    refreshContributions,
+    refreshRecurringContributions,
+  ]);
 
   const setMonthlyTarget = useCallback(async (value: number) => {
     setMonthlyTargetState(value);
@@ -159,6 +203,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [refreshAccounts]
   );
 
+  const addRecurringContribution = useCallback(
+    async (recurring: Omit<RecurringContribution, 'id'>) => {
+      await db.insertRecurringContribution(recurring);
+      await refreshRecurringContributions();
+    },
+    [refreshRecurringContributions]
+  );
+
+  const setRecurringContributionActive = useCallback(
+    async (id: string, isActive: boolean) => {
+      await db.setRecurringContributionActive(id, isActive);
+      await refreshRecurringContributions();
+    },
+    [refreshRecurringContributions]
+  );
+
+  const deleteRecurringContribution = useCallback(
+    async (id: string) => {
+      await db.deleteRecurringContribution(id);
+      await refreshRecurringContributions();
+    },
+    [refreshRecurringContributions]
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       isReady,
@@ -166,6 +234,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       transactions,
       categories,
       contributions,
+      recurringContributions,
       monthlyTarget,
       plaidEnvironment,
       isSyncing,
@@ -176,6 +245,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addManualContribution,
       reclassifyTransaction,
       updateAccountRetirementInfo,
+      addRecurringContribution,
+      setRecurringContributionActive,
+      deleteRecurringContribution,
     }),
     [
       isReady,
@@ -183,6 +255,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       transactions,
       categories,
       contributions,
+      recurringContributions,
       monthlyTarget,
       plaidEnvironment,
       isSyncing,
@@ -193,6 +266,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addManualContribution,
       reclassifyTransaction,
       updateAccountRetirementInfo,
+      addRecurringContribution,
+      setRecurringContributionActive,
+      deleteRecurringContribution,
     ]
   );
 

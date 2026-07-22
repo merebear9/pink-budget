@@ -6,6 +6,7 @@ import {
   Contribution,
   ContributionLabel,
   DEFAULT_CATEGORIES,
+  RecurringContribution,
   Transaction,
   TransactionClassification,
 } from './models/types';
@@ -80,7 +81,16 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       label TEXT NOT NULL,
       source TEXT NOT NULL,
       notes TEXT,
-      linkedTransactionId TEXT
+      linkedTransactionId TEXT,
+      recurringContributionId TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS recurring_contributions (
+      id TEXT PRIMARY KEY NOT NULL,
+      label TEXT NOT NULL,
+      amount REAL NOT NULL,
+      note TEXT,
+      isActive INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -333,8 +343,9 @@ export async function insertContribution(
   const db = await getDb();
   const id = generateId();
   await db.runAsync(
-    `INSERT INTO contributions (id, date, amount, label, source, notes, linkedTransactionId)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO contributions
+      (id, date, amount, label, source, notes, linkedTransactionId, recurringContributionId)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       contribution.date,
@@ -343,6 +354,7 @@ export async function insertContribution(
       contribution.source,
       contribution.notes,
       contribution.linkedTransactionId,
+      contribution.recurringContributionId,
     ]
   );
   return { ...contribution, id };
@@ -352,6 +364,69 @@ export async function getContributions(): Promise<Contribution[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<Contribution>('SELECT * FROM contributions ORDER BY date DESC');
   return rows;
+}
+
+// ── Recurring Contributions ──
+
+interface RecurringContributionRow {
+  id: string;
+  label: ContributionLabel;
+  amount: number;
+  note: string | null;
+  isActive: number;
+}
+
+function recurringFromRow(row: RecurringContributionRow): RecurringContribution {
+  return { ...row, isActive: row.isActive === 1 };
+}
+
+export async function insertRecurringContribution(
+  recurring: Omit<RecurringContribution, 'id'>
+): Promise<RecurringContribution> {
+  const db = await getDb();
+  const id = generateId();
+  await db.runAsync(
+    'INSERT INTO recurring_contributions (id, label, amount, note, isActive) VALUES (?, ?, ?, ?, ?)',
+    [id, recurring.label, recurring.amount, recurring.note, recurring.isActive ? 1 : 0]
+  );
+  return { ...recurring, id };
+}
+
+export async function getRecurringContributions(): Promise<RecurringContribution[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<RecurringContributionRow>(
+    'SELECT * FROM recurring_contributions ORDER BY label'
+  );
+  return rows.map(recurringFromRow);
+}
+
+export async function setRecurringContributionActive(id: string, isActive: boolean): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('UPDATE recurring_contributions SET isActive = ? WHERE id = ?', [
+    isActive ? 1 : 0,
+    id,
+  ]);
+}
+
+export async function deleteRecurringContribution(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM recurring_contributions WHERE id = ?', [id]);
+}
+
+export async function hasContributionForRecurringInMonth(
+  recurringContributionId: string,
+  year: number,
+  month: number // 1-12
+): Promise<boolean> {
+  const db = await getDb();
+  const monthStr = String(month).padStart(2, '0');
+  const row = await db.getFirstAsync<{ id: string }>(
+    `SELECT id FROM contributions
+     WHERE recurringContributionId = ?
+       AND strftime('%Y-%m', date) = ?`,
+    [recurringContributionId, `${year}-${monthStr}`]
+  );
+  return row !== null;
 }
 
 // ── Settings (simple key/value store) ──

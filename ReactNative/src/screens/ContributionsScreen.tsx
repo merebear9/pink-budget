@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme/pink';
@@ -9,12 +9,26 @@ import { formatCurrency } from '../utils/formatters';
 import { useData } from '../context/DataContext';
 
 export default function ContributionsScreen() {
-  const { contributions, monthlyTarget, addManualContribution } = useData();
+  const {
+    contributions,
+    monthlyTarget,
+    addManualContribution,
+    recurringContributions,
+    addRecurringContribution,
+    setRecurringContributionActive,
+    deleteRecurringContribution,
+  } = useData();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [showAddModal, setShowAddModal] = useState(false);
   const [newAmount, setNewAmount] = useState('');
   const [newLabel, setNewLabel] = useState<ContributionLabel>('TSP');
   const [isSaving, setIsSaving] = useState(false);
+
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [recurringAmount, setRecurringAmount] = useState('');
+  const [recurringLabel, setRecurringLabel] = useState<ContributionLabel>('401(k)');
+  const [recurringNote, setRecurringNote] = useState('');
+  const [isSavingRecurring, setIsSavingRecurring] = useState(false);
 
   const annualSummary = useMemo(() => {
     const yearContribs = contributions.filter(c => {
@@ -72,11 +86,37 @@ export default function ContributionsScreen() {
         label: newLabel,
         notes: null,
         linkedTransactionId: null,
+        recurringContributionId: null,
       });
       resetAddForm();
       setShowAddModal(false);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const resetRecurringForm = () => {
+    setRecurringAmount('');
+    setRecurringLabel('401(k)');
+    setRecurringNote('');
+  };
+
+  const handleSaveRecurring = async () => {
+    const amount = parseFloat(recurringAmount);
+    if (!amount || amount <= 0) return;
+
+    setIsSavingRecurring(true);
+    try {
+      await addRecurringContribution({
+        amount,
+        label: recurringLabel,
+        note: recurringNote.trim() || null,
+        isActive: true,
+      });
+      resetRecurringForm();
+      setShowRecurringModal(false);
+    } finally {
+      setIsSavingRecurring(false);
     }
   };
 
@@ -163,6 +203,47 @@ export default function ContributionsScreen() {
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalAmount}>{formatCurrency(annualSummary.totalContributed)}</Text>
         </View>
+      </View>
+
+      {/* Recurring Contributions */}
+      <View style={[styles.card, shadows.card]}>
+        <Text style={styles.sectionTitle}>Recurring Contributions</Text>
+        <Text style={styles.recurringHint}>
+          For amounts Plaid can't see, like an employer 401(k). Added automatically once a
+          month, the first time you open the app that month.
+        </Text>
+
+        {recurringContributions.length === 0 ? (
+          <Text style={styles.recurringEmpty}>No recurring contributions set up yet.</Text>
+        ) : (
+          recurringContributions.map(item => (
+            <View key={item.id} style={styles.recurringRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.recurringLabel}>
+                  {item.label}
+                  {item.note ? ` — ${item.note}` : ''}
+                </Text>
+                <Text style={styles.recurringAmount}>{formatCurrency(item.amount)}/mo</Text>
+              </View>
+              <Switch
+                value={item.isActive}
+                onValueChange={value => setRecurringContributionActive(item.id, value)}
+                trackColor={{ true: colors.pinkPrimary }}
+              />
+              <TouchableOpacity
+                onPress={() => deleteRecurringContribution(item.id)}
+                style={styles.recurringDelete}
+              >
+                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+
+        <TouchableOpacity style={styles.addRecurringButton} onPress={() => setShowRecurringModal(true)}>
+          <Ionicons name="add" size={18} color={colors.pinkPrimary} />
+          <Text style={styles.addRecurringButtonText}>Add Recurring Contribution</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Monthly Detail */}
@@ -256,6 +337,75 @@ export default function ContributionsScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Add Recurring Contribution Modal */}
+      <Modal
+        visible={showRecurringModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowRecurringModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add Recurring Contribution</Text>
+
+            <Text style={styles.modalLabel}>Monthly Amount</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={recurringAmount}
+              onChangeText={setRecurringAmount}
+              keyboardType="decimal-pad"
+              placeholder="$0"
+              autoFocus
+            />
+
+            <Text style={styles.modalLabel}>Account</Text>
+            <View style={styles.labelRow}>
+              {CONTRIBUTION_LABELS.map(label => (
+                <TouchableOpacity
+                  key={label}
+                  style={[styles.labelChip, recurringLabel === label && styles.labelChipActive]}
+                  onPress={() => setRecurringLabel(label)}
+                >
+                  <Text style={[styles.labelChipText, recurringLabel === label && styles.labelChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.modalLabel}>Note (optional)</Text>
+            <TextInput
+              style={styles.noteInput}
+              value={recurringNote}
+              onChangeText={setRecurringNote}
+              placeholder="e.g. Tire Rack employer 401(k)"
+            />
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => {
+                  resetRecurringForm();
+                  setShowRecurringModal(false);
+                }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSaveButton, isSavingRecurring && { opacity: 0.6 }]}
+                onPress={handleSaveRecurring}
+                disabled={isSavingRecurring || !recurringAmount}
+              >
+                <Text style={styles.modalSaveText}>{isSavingRecurring ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -293,6 +443,23 @@ const styles = StyleSheet.create({
   monthDiff: { ...typography.caption, marginTop: 2 },
   addButton: { backgroundColor: colors.pinkPrimary, borderRadius: borderRadius.md, padding: spacing.md, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
   addButtonText: { ...typography.headline, color: '#fff' },
+  recurringHint: { ...typography.caption, color: colors.textMuted, marginTop: -spacing.sm, marginBottom: spacing.md },
+  recurringEmpty: { ...typography.body, color: colors.textMuted, paddingVertical: spacing.sm },
+  recurringRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.border, gap: spacing.sm },
+  recurringLabel: { ...typography.body, color: colors.textPrimary },
+  recurringAmount: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  recurringDelete: { padding: 4 },
+  addRecurringButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.md, paddingVertical: spacing.sm },
+  addRecurringButtonText: { ...typography.callout, color: colors.pinkPrimary },
+  noteInput: {
+    ...typography.body,
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   modalCard: { backgroundColor: colors.bgCard, borderTopLeftRadius: borderRadius.lg, borderTopRightRadius: borderRadius.lg, padding: spacing.xl },
   modalTitle: { ...typography.title2, color: colors.textPrimary, marginBottom: spacing.lg },
