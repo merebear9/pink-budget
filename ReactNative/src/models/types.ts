@@ -23,6 +23,7 @@ export const CLASSIFICATION_META: Record<TransactionClassification, {
 
 export type AccountType = 'depository' | 'credit' | 'investment' | 'retirement' | 'loan' | 'other';
 export type ContributionLabel = 'TSP' | '401(k)' | 'Roth IRA' | 'Other';
+export const CONTRIBUTION_LABELS: ContributionLabel[] = ['TSP', '401(k)', 'Roth IRA', 'Other'];
 
 export interface Account {
   id: string;

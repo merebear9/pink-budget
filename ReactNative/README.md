@@ -89,12 +89,15 @@ Same classification system as the iOS app:
 - **Contribution**: Money to Vanguard/TSP/401k/IRA → tracked separately
 - **Income**: Paychecks, deposits → cash flow only
 
-## Known gaps
+## Manual corrections
 
-- Manual transaction reclassification (long-press to fix a miscategorized
-  transaction) has a `reclassifyTransaction` function in `database.ts` but no UI
-  hooked up to it yet.
-- No account-level UI for marking an account as retirement / setting its
-  contribution label after connecting (`setAccountRetirementInfo` exists in
-  `database.ts`, unused) — mirrors a similar gap in the iOS app's Setup Guide (its
-  Step 17c isn't implemented there either).
+- **Reclassify a transaction**: long-press a row in Transactions to reassign it to a
+  budget category, or to Transfer / Investment / Income / Other.
+- **Mark an account as retirement**: tap an account in Accounts to toggle "Is
+  Retirement Account" and pick which bucket (TSP / 401(k) / Roth IRA / Other) its
+  contributions count toward.
+
+Neither of these "remembers" the correction for future transactions the way the iOS
+app's `MerchantLearningService` does — each correction only applies to that one
+transaction/account. Learned-merchant-rule matching would be a follow-up, not
+something built here yet.

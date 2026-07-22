@@ -1,5 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Account, AccountType, BudgetCategory, Contribution, Transaction } from '../models/types';
+import {
+  Account,
+  AccountType,
+  BudgetCategory,
+  ContributionLabel,
+  Contribution,
+  Transaction,
+  TransactionClassification,
+} from '../models/types';
 import * as db from '../database';
 import { syncAccountTransactions } from '../services/transactionService';
 import { PlaidAccount } from '../services/plaidService';
@@ -22,6 +30,16 @@ interface DataContextValue {
   addAccountsFromPlaid: (plaidAccounts: PlaidAccount[], accessToken: string) => Promise<void>;
   syncAllAccounts: () => Promise<void>;
   addManualContribution: (contribution: Omit<Contribution, 'id' | 'source'>) => Promise<void>;
+  reclassifyTransaction: (
+    transactionId: string,
+    classification: TransactionClassification,
+    categoryName: string
+  ) => Promise<void>;
+  updateAccountRetirementInfo: (
+    accountId: string,
+    isRetirementAccount: boolean,
+    contributionLabel: ContributionLabel
+  ) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -125,6 +143,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [refreshContributions]
   );
 
+  const reclassifyTransaction = useCallback(
+    async (transactionId: string, classification: TransactionClassification, categoryName: string) => {
+      await db.reclassifyTransaction(transactionId, classification, categoryName);
+      await refreshTransactions();
+    },
+    [refreshTransactions]
+  );
+
+  const updateAccountRetirementInfo = useCallback(
+    async (accountId: string, isRetirementAccount: boolean, contributionLabel: ContributionLabel) => {
+      await db.setAccountRetirementInfo(accountId, isRetirementAccount, contributionLabel);
+      await refreshAccounts();
+    },
+    [refreshAccounts]
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       isReady,
@@ -140,6 +174,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addAccountsFromPlaid,
       syncAllAccounts,
       addManualContribution,
+      reclassifyTransaction,
+      updateAccountRetirementInfo,
     }),
     [
       isReady,
@@ -155,6 +191,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addAccountsFromPlaid,
       syncAllAccounts,
       addManualContribution,
+      reclassifyTransaction,
+      updateAccountRetirementInfo,
     ]
   );
 

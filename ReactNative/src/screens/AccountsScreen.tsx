@@ -2,9 +2,11 @@
 // Opens Plaid Link via react-native-plaid-link-sdk, exchanges the resulting
 // public token for an access token through the backend, fetches balances,
 // and creates local Account records. Reached from Settings > Manage Accounts.
+// Tapping a connected account lets you mark it as a retirement account and
+// pick which contribution bucket (TSP / 401(k) / Roth IRA / Other) it feeds.
 
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Modal, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   createPlaidLinkSession,
@@ -15,6 +17,7 @@ import { colors, typography, spacing, borderRadius, shadows } from '../theme/pin
 import { formatCurrency } from '../utils/formatters';
 import { useData } from '../context/DataContext';
 import { createLinkToken, exchangePublicToken, fetchBalances } from '../services/plaidService';
+import { Account, CONTRIBUTION_LABELS, ContributionLabel } from '../models/types';
 
 const ACCOUNT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   depository: 'cash-outline',
@@ -28,9 +31,10 @@ const ACCOUNT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 type LinkState = 'idle' | 'connecting' | 'finishing';
 
 export default function AccountsScreen() {
-  const { accounts, addAccountsFromPlaid } = useData();
+  const { accounts, addAccountsFromPlaid, updateAccountRetirementInfo } = useData();
   const [linkState, setLinkState] = useState<LinkState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
   const handleLinkSuccess = useCallback(
     async (publicToken: string) => {
@@ -92,7 +96,11 @@ export default function AccountsScreen() {
         </View>
       ) : (
         accounts.map(account => (
-          <View key={account.id} style={[styles.card, shadows.card]}>
+          <TouchableOpacity
+            key={account.id}
+            style={[styles.card, shadows.card]}
+            onPress={() => setEditingAccount(account)}
+          >
             <View style={styles.cardHeader}>
               <Ionicons
                 name={ACCOUNT_ICONS[account.accountType]}
@@ -105,6 +113,7 @@ export default function AccountsScreen() {
                 <Text style={styles.institutionName}>{account.institutionName}</Text>
               </View>
               <Text style={styles.balance}>{formatCurrency(account.currentBalance)}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
             </View>
             {account.isRetirementAccount && (
               <View style={styles.retirementBadgeRow}>
@@ -119,7 +128,7 @@ export default function AccountsScreen() {
                 Last synced {new Date(account.lastSynced).toLocaleString()}
               </Text>
             )}
-          </View>
+          </TouchableOpacity>
         ))
       )}
 
@@ -147,7 +156,99 @@ export default function AccountsScreen() {
               : 'Connect Account'}
         </Text>
       </TouchableOpacity>
+
+      <AccountEditModal
+        account={editingAccount}
+        onClose={() => setEditingAccount(null)}
+        onSave={updateAccountRetirementInfo}
+      />
     </ScrollView>
+  );
+}
+
+function AccountEditModal({
+  account,
+  onClose,
+  onSave,
+}: {
+  account: Account | null;
+  onClose: () => void;
+  onSave: (accountId: string, isRetirementAccount: boolean, contributionLabel: ContributionLabel) => Promise<void>;
+}) {
+  const [isRetirement, setIsRetirement] = useState(account?.isRetirementAccount ?? false);
+  const [label, setLabel] = useState<ContributionLabel>(account?.contributionLabel ?? 'Other');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Reset local edit state whenever a different account is opened.
+  React.useEffect(() => {
+    if (account) {
+      setIsRetirement(account.isRetirementAccount);
+      setLabel(account.contributionLabel);
+    }
+  }, [account]);
+
+  if (!account) return null;
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(account.id, isRetirement, label);
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalCard, shadows.card]}>
+          <Text style={styles.modalTitle}>{account.accountName}</Text>
+          <Text style={styles.modalSubtitle}>{account.institutionName}</Text>
+
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Is Retirement Account</Text>
+            <Switch
+              value={isRetirement}
+              onValueChange={setIsRetirement}
+              trackColor={{ true: colors.pinkPrimary }}
+            />
+          </View>
+
+          {isRetirement && (
+            <>
+              <Text style={styles.modalLabel}>Contribution Label</Text>
+              <View style={styles.chipWrap}>
+                {CONTRIBUTION_LABELS.map(l => (
+                  <TouchableOpacity
+                    key={l}
+                    style={[styles.labelChip, label === l && styles.labelChipActive]}
+                    onPress={() => setLabel(l)}
+                  >
+                    <Text style={[styles.labelChipText, label === l && styles.labelChipTextActive]}>
+                      {l}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
+
+          <View style={styles.modalButtonRow}>
+            <TouchableOpacity style={[styles.modalButton, styles.modalCancelButton]} onPress={onClose}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalSaveButton, isSaving && { opacity: 0.6 }]}
+              onPress={handleSave}
+              disabled={isSaving}
+            >
+              <Text style={styles.modalSaveText}>{isSaving ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -194,4 +295,32 @@ const styles = StyleSheet.create({
   },
   connectButtonDisabled: { opacity: 0.7 },
   connectButtonText: { ...typography.headline, color: '#fff' },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalCard: {
+    backgroundColor: colors.bgCard,
+    borderTopLeftRadius: borderRadius.lg,
+    borderTopRightRadius: borderRadius.lg,
+    padding: spacing.xl,
+  },
+  modalTitle: { ...typography.title2, color: colors.textPrimary },
+  modalSubtitle: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.lg },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  switchLabel: { ...typography.body, color: colors.textPrimary },
+  modalLabel: { ...typography.callout, color: colors.textSecondary, marginBottom: spacing.sm },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  labelChip: { backgroundColor: colors.pinkLight, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
+  labelChipActive: { backgroundColor: colors.pinkPrimary },
+  labelChipText: { ...typography.callout, color: colors.pinkPrimary },
+  labelChipTextActive: { color: '#fff' },
+  modalButtonRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
+  modalButton: { flex: 1, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' },
+  modalCancelButton: { backgroundColor: colors.pinkLight },
+  modalCancelText: { ...typography.headline, color: colors.pinkPrimary },
+  modalSaveButton: { backgroundColor: colors.pinkPrimary },
+  modalSaveText: { ...typography.headline, color: '#fff' },
 });

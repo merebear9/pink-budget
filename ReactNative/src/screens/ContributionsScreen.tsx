@@ -4,11 +4,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme/pink';
-import { ContributionLabel, MonthlyContributionSummary } from '../models/types';
+import { CONTRIBUTION_LABELS, ContributionLabel, MonthlyContributionSummary } from '../models/types';
 import { formatCurrency } from '../utils/formatters';
 import { useData } from '../context/DataContext';
-
-const CONTRIBUTION_LABELS: ContributionLabel[] = ['TSP', '401(k)', 'Roth IRA', 'Other'];
 
 export default function ContributionsScreen() {
   const { contributions, monthlyTarget, addManualContribution } = useData();
