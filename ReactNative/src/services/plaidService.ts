@@ -1,7 +1,7 @@
 // PinkBudget Plaid Service
 // Calls your Flask backend (not Plaid directly -- never expose secrets in the app)
 
-const BACKEND_URL = 'https://your-backend.railway.app'; // TODO: Update this
+const BACKEND_URL = 'https://pink-budget-production.up.railway.app';
 
 export interface PlaidPersonalFinanceCategory {
   primary: string;

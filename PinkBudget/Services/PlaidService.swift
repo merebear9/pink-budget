@@ -28,13 +28,7 @@ import Foundation
 class PlaidService {
     static let shared = PlaidService()
     
-    // TODO: Replace with your deployed backend URL
-    // Options for free hosting:
-    //   - Railway.app (free tier)
-    //   - Render.com (free tier)
-    //   - Vercel serverless functions
-    //   - Firebase Cloud Functions
-    private let backendBaseURL = "https://your-backend.railway.app"
+    private let backendBaseURL = "https://pink-budget-production.up.railway.app"
     
     // MARK: - Step 1: Get Link Token
     
